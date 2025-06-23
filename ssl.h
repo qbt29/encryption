@@ -124,6 +124,65 @@ void derive_keys(const unsigned char* secret, size_t secret_len,
     EVP_PKEY_CTX_free(ctx);
 }
 
+unsigned char* sign_message(EVP_PKEY *privkey, const unsigned char *message, size_t message_len, size_t *sig_len) {
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    if (!mdctx) handle_openssl_error();
+
+    if (EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, privkey) <= 0) {
+        EVP_MD_CTX_free(mdctx);
+        handle_openssl_error();
+    }
+
+    if (EVP_DigestSignUpdate(mdctx, message, message_len) <= 0) {
+        EVP_MD_CTX_free(mdctx);
+        handle_openssl_error();
+    }
+
+    // Получаем длину подписи
+    if (EVP_DigestSignFinal(mdctx, NULL, sig_len) <= 0) {
+        EVP_MD_CTX_free(mdctx);
+        handle_openssl_error();
+    }
+
+    unsigned char *signature = OPENSSL_malloc(*sig_len);
+    if (!signature) {
+        EVP_MD_CTX_free(mdctx);
+        handle_openssl_error();
+    }
+
+    if (EVP_DigestSignFinal(mdctx, signature, sig_len) <= 0) {
+        OPENSSL_free(signature);
+        EVP_MD_CTX_free(mdctx);
+        handle_openssl_error();
+    }
+
+    EVP_MD_CTX_free(mdctx);
+    return signature;
+}
+
+int verify_signature(EVP_PKEY *pubkey, const unsigned char *message, size_t message_len, 
+                     const unsigned char *signature, size_t sig_len) {
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    if (!mdctx) return -1;
+
+    if (EVP_DigestVerifyInit(mdctx, NULL, EVP_sha256(), NULL, pubkey) <= 0) {
+        EVP_MD_CTX_free(mdctx);
+        return -2;
+    }
+
+    if (EVP_DigestVerifyUpdate(mdctx, message, message_len) <= 0) {
+        EVP_MD_CTX_free(mdctx);
+        return -3;
+    }
+
+    int ret = EVP_DigestVerifyFinal(mdctx, signature, sig_len);
+    EVP_MD_CTX_free(mdctx);
+
+    if (ret == 1) return 0;       // Успех
+    else if (ret == 0) return -1; // Неверная подпись
+    else return -2;               // Ошибка
+}
+
 void generate_iv(unsigned char* iv) {
     if (RAND_bytes(iv, sizeof(iv)) != 1) {
         fprintf(stderr, "Ошибка генерации IV\n");

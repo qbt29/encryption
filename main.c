@@ -12,7 +12,7 @@ int main() {
     EVP_PKEY *alice_priv = generate_privkey(pctx);
     EVP_PKEY_CTX_free(pctx);
     // Генерация ключевой пары для Bob
-    EVP_PKEY_CTX *pctx = generate_context();
+    pctx = generate_context();
     keygen_init(pctx);
     EVP_PKEY *bob_priv = generate_privkey(pctx);
     EVP_PKEY_CTX_free(pctx);
@@ -28,6 +28,7 @@ int main() {
     unsigned char* alice_secret = find_secret(derive_ctx, bob_pub);
 
     EVP_PKEY_CTX_free(derive_ctx);
+    printf("%s\n", alice_pub);
     // Вычисление общего секрета Bob
     derive_ctx = make_ECDH_context(bob_priv);
     unsigned char *bob_secret = find_secret(derive_ctx, alice_pub);
@@ -40,8 +41,12 @@ int main() {
     // Генерация ключей из общего секрета
     derive_keys(alice_secret, secret_len, enc_key, sig_key);
 
-    unsigned char message[] = "Hello, Bob!";
-    unsigned char aad[] = "ALice -> Bob";
+    unsigned char benc_key[32];
+    unsigned char bsig_key[32];
+    derive_keys(bob_secret, secret_len, benc_key, bsig_key);
+
+    unsigned char message[] = "Hello, my friend Bob!";
+    unsigned char aad[] = "ALice -> Bob (friend)";
     size_t message_len = strlen((char*)message);
     size_t aad_len = strlen((char*)aad);
 
@@ -56,8 +61,9 @@ int main() {
         fprintf(stderr, "Encrypting error, code: %d\n", ciphertext_len);
         exit(1);
     }
+    
     unsigned char decrypted[4096];
-    int decrypted_len = decrypt_aes_gcm(enc_key, iv, aad, ciphertext, ciphertext_len, tag, decrypted);
+    int decrypted_len = decrypt_aes_gcm(benc_key, iv, aad, ciphertext, ciphertext_len, tag, decrypted);
     if (decrypted_len < 0) {
         fprintf(stderr, "Decrypting error, code: %d\n", decrypted_len);
         exit(1);
